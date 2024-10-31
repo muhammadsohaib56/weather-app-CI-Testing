@@ -1,0 +1,72 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  cache-and-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout code from repository
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Cache Node.js dependencies for the frontend
+      - name: Cache dependencies for frontend
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      # Step 3: Cache Python dependencies for the backend
+      - name: Cache dependencies for backend
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Step 4: Build Docker image for frontend
+      - name: Build Docker image for frontend
+        run: docker build -t sohaibshoukat56/weather-frontend ./frontend
+
+      # Step 5: Build Docker image for backend
+      - name: Build Docker image for backend
+        run: docker build -t sohaibshoukat56/weather-backend ./backend
+
+      # Step 6: Save test results for frontend and backend
+      - name: Save test results for frontend and backend
+        if: always()
+        run: |
+          mkdir -p test-results/frontend
+          mkdir -p test-results/backend
+          cp ./frontend/test-results.xml test-results/frontend/
+          cp ./backend/test-results.xml test-results/backend/
+        continue-on-error: true
+
+      # Step 7: Upload test results as artifacts
+      - name: Upload test results as artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-results
+          path: test-results
+
+      # Step 8: Log in to DockerHub
+      - name: Log in to DockerHub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # Step 9: Push frontend Docker image to DockerHub
+      - name: Push frontend Docker image to DockerHub
+        run: docker push sohaibshoukat56/weather-frontend
+
+      # Step 10: Push backend Docker image to DockerHub
+      - name: Push backend Docker image to DockerHub
+        run: docker push sohaibshoukat56/weather-backend
